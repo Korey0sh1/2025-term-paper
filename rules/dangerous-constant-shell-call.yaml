@@ -1,0 +1,26 @@
+rules:
+  - id: dangerous-constant-shell-call
+    patterns:
+      - pattern-either:
+          - pattern: system($CMD)
+          - pattern: popen($CMD, ...)
+          - pattern: execl($PATH, $CMD, ...)
+          - pattern: execlp($PATH, $CMD, ...)
+      - pattern-regex: (?i)".*(/bin/sh|bash|zsh|nc|curl|wget|python|perl|powershell|cmd\.exe|ftp|telnet).*"
+    message: |
+      Detected dangerous hardcoded shell command passed to system-like function.
+      These shell-invoking commands are dangerous even if constant.
+    severity: ERROR
+    languages: [c]
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe2022-top25: true
+      subcategory: [audit]
+      license: Semgrep Rules License v1.0
+      vulnerability_class: [Command Injection]
+

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>二进制程序分析系统</title>
+    <style>
+        .page-title {
+            text-align: center;
+            margin: 30px 0;
+            color: #2c3e50;
+            font-size: 26px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .upload-box {
+            border: 2px dashed #95a5a6;
+            padding: 30px;
+            text-align: center;
+            margin: 20px auto;
+            max-width: 600px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .upload-box:hover {
+            border-color: #3498db;
+        }
+
+        .preview-area {
+            margin: 20px auto;
+            max-width: 800px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .decompile-btn {
+            background: #3498db;
+            color: white;
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+            transition: background 0.3s;
+        }
+
+        .scan-btn {
+            background: #3498db;
+            color: white;
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+            transition: background 0.3s;
+        }
+        
+        .decompile-btn:hover {
+            background: #2980b9;
+        }
+
+        .status-msg {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .success {
+            background: #dff0d8;
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
+        }
+
+        .download-link {
+            color: #007bff;
+            text-decoration: none;
+            margin-left: 10px;
+        }
+
+        .download-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="page-title">基于静态分析的二进制程序反编译系统</h1>
+    
+
+    <div class="upload-box" onclick="document.getElementById('realFile').click()">
+        <p>点击选择文件 或 拖放文件至此</p>
+        <input 
+            type="file" 
+            id="realFile" 
+            class="hidden"
+            multiple
+            accept="*"
+        >
+    </div>
+    
+    <div class="preview-area" id="preview"></div>
+
+    <script>
+        const realFile = document.getElementById('realFile');
+        const preview = document.getElementById('preview');
+
+        // 文件处理
+        realFile.addEventListener('change', handleFileSelect);
+        
+        document.addEventListener('dragover', e => e.preventDefault());
+        document.addEventListener('drop', e => {
+            e.preventDefault();
+            handleFiles(e.dataTransfer.files);
+        });
+
+        function handleFileSelect(e) {
+            handleFiles(e.target.files);
+        }
+
+        function handleFiles(files) {
+            preview.innerHTML = '';
+            
+            Array.from(files).forEach(file => {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'file-item';
+                fileDiv.innerHTML = `
+                    <div>
+                        <p>文件名: ${file.name}</p>
+                        <p>大小: ${(file.size/1024/1024).toFixed(2)} MB</p>
+                        <button 
+                            class="decompile-btn" 
+                            onclick="startDecompile('${file.name}')"
+                        >
+                            开始反编译
+                        </button>
+                        <div id="status-${file.name}"></div>
+                    </div>
+                    <hr>
+                `;
+                preview.appendChild(fileDiv);
+
+                uploadFile(file);
+            });
+        }
+
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            }).catch(console.error);
+        }
+
+        // ========== 反编译函数 ==========
+        function startDecompile(filename) {
+            const statusDiv = document.getElementById(`status-${filename}`);
+            statusDiv.innerHTML = '<div class="status-msg">反编译进行中...</div>';
+
+            fetch('/decompile', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ filename: filename })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('服务器错误');
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    statusDiv.innerHTML = `<div class="status-msg error">错误: ${data.error}</div>`;
+                    return;
+                }
+                
+                // 显示反编译成功和下载链接
+                statusDiv.innerHTML = `
+                    <div class="status-msg success">
+                        ✓ 反编译成功完成！
+                        <a class="download-link" href="/download/${data.output_dir}/${data.output_file}" download>
+                            下载反编译代码
+                        </a>
+                    </div>
+                    <button 
+                        class="scan-btn" 
+                        onclick="startSemgrepScan('${data.output_dir}')"
+                    >
+                        执行Semgrep安全扫描
+                    </button>
+                    <div id="semgrep-status-${data.output_dir}"></div>
+                `;
+            })
+            .catch(error => {
+                statusDiv.innerHTML = `<div class="status-msg error">失败: ${error.message}</div>`;
+            });
+        }
+
+        // ========== Semgrep扫描函数 ==========
+        function startSemgrepScan(outputDir) {
+            const statusDiv = document.getElementById(`semgrep-status-${outputDir}`);
+            statusDiv.innerHTML = '<div class="status-msg">安全扫描进行中...</div>';
+             
+            fetch(`/semgrep/${outputDir}`)
+                
+                .then(response => {
+                    if (!response.ok) throw new Error('扫描失败');
+                    return response.json();
+                })
+                .then(report => {
+                    let resultsHtml = '';
+                    if (report.results && report.results.length > 0) {
+                        resultsHtml = `
+                            <div class="semgrep-results">
+                                <h3>🔍 代码安全扫描结果 (Semgrep)</h3>
+                                <ul>
+                                    ${report.results.map(result => `
+                                        <li>
+                                            <strong>规则: ${result.check_id}</strong><br>
+                                            严重性: ${result.extra.severity}<br>
+                                            位置: ${result.path}:${result.start.line}<br>
+                                            描述: ${result.extra.message}
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    } else {
+                        resultsHtml = '<div class="status-msg success">✓ 未发现安全问题</div>';
+                    }
+
+                    statusDiv.innerHTML = resultsHtml;
+                    
+                    // 添加AI分析按钮
+                    statusDiv.innerHTML += `
+                        <button 
+                            class="scan-btn" 
+                            style="background: #9b59b6; margin-top: 10px;"
+                            onclick="analyzeWithAI('${outputDir}')"
+                        >
+                            AI代码分析
+                        </button>
+                        <div id="ai-analysis-${outputDir}"></div>
+                    `;
+                })
+                .catch(e => {
+                    statusDiv.innerHTML = `<div class="status-msg error">扫描错误: ${e.message}</div>`;
+                });
+        }
+
+        // ========== AI分析函数 ==========
+        function analyzeWithAI(outputDir) {
+            const statusDiv = document.getElementById(`ai-analysis-${outputDir}`);
+            statusDiv.innerHTML = '<div class="status-msg">AI分析中...</div>';
+            console.log("outputDir:", outputDir);
+            fetch(`/analyze/${outputDir}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('AI分析失败');
+                    return response.json();
+                })
+                .then(analysis => {
+                    let analysisHtml = `
+                        <div class="ai-results" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                            <h3>🤖 AI分析结果</h3>
+                            <h4>代码摘要:</h4>
+                            <p>${analysis.code_summary}</p>
+                            <h4>安全问题:</h4>
+                            <p>${analysis.security_issues}</p>
+                            <h4>改进建议:</h4>
+                            <p>${analysis.recommendations}</p>
+                        </div>
+                    `;
+                    statusDiv.innerHTML = analysisHtml;
+                })
+                .catch(e => {
+                    statusDiv.innerHTML = `<div class="status-msg error">AI分析错误: ${e.message}</div>`;
+                });
+        }
+    </script>
+</body>
+</html>

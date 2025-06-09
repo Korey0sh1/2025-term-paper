@@ -1,0 +1,40 @@
+rules:
+  - id: double-free
+    patterns:
+      - pattern-either:
+          - pattern: |
+              free($VAR);
+              ...
+              free($VAR);
+          - pattern: |
+              free($A);
+              ...
+              $B = $A;
+              ...
+              free($B);
+      - pattern-not: |
+          free($VAR);
+          ...
+          $VAR = NULL;
+          ...
+          free($VAR);
+      - pattern-not: |
+          free($VAR);
+          ...
+          $VAR = malloc(...);
+          ...
+          free($VAR);
+    message: |
+      Detected possible double free.
+      Freeing the same memory twice (directly or through alias) can lead to undefined behavior or security vulnerabilities.
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ["CWE-415: Double Free"]
+      category: security
+      confidence: MEDIUM
+      likelihood: HIGH
+      impact: HIGH
+      cwe2022-top25: true
+      license: Semgrep Rules License v1.0
+      vulnerability_class: [Double Free]

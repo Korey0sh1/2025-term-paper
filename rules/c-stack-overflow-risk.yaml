@@ -1,0 +1,27 @@
+rules:
+  - id: c-stack-overflow-risk
+    patterns:
+      - pattern-either:
+          - pattern: gets($BUF)
+          - pattern: strcpy($DST, $SRC)
+          - pattern: strcat($DST, $SRC)
+          - pattern: sprintf($BUF, ...)
+          - pattern: scanf("%s", $BUF)
+    message: |
+      Detected use of unsafe function that may cause stack-based buffer overflow.
+      Consider using safer alternatives like fgets, strncpy, strncat, snprintf, etc.
+    severity: ERROR
+    languages: [c]
+    metadata:
+      cwe: ["CWE-121: Stack-based Buffer Overflow"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      technology: [c]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe2022-top25: true
+      subcategory: [audit]
+      license: Semgrep Rules License v1.0
+      vulnerability_class: [Buffer Overflow]
+
